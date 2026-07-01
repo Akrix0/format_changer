@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Format Converter{% endblock %}
+
+{% block content %}
+<div class="convert-page">
+<div class="hero-card">
+    <h1>Convert between file formats</h1>
+    <p>Choose a format family and transform your files into a compatible target format in seconds.</p>
+</div>
+
+<div class="category-grid">
+    {% for category in categories %}
+    <a class="category-card" href="{{ url_for('convert_category_page', category_key=category.key) }}">
+    <h3>{{ category.title }}</h3>
+    <p>{{ category.description }}</p>
+    <span class="category-pill">Supported formats: {{ category.formats|join(', ') }}</span>
+    </a>
+    {% endfor %}
+</div>
+</div>
+{% endblock %}

@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.title }} formats{% endblock %}
+
+{% block content %}
+<div class="convert-page">
+  <div class="hero-card">
+    <h1>{{ category.title }} format converter</h1>
+    <p>{{ category.description }}</p>
+  </div>
+
+  <div class="convert-card">
+    <form id="convert-form" enctype="multipart/form-data">
+      <label for="file-upload">Choose a source file</label>
+      <input id="file-upload" name="file" type="file" accept="{{ category.file_accept }}" />
+
+      <label for="format-select">Pick a target format</label>
+      <select id="format-select" name="target_format">
+        {% for fmt in category.formats %}
+        <option value="{{ fmt.lower() }}">{{ fmt }}</option>
+        {% endfor %}
+      </select>
+
+      <div class="actions-row">
+        <button id="convert-btn" type="submit">Convert</button>
+        <button id="clear-btn" type="button" class="btn-secondary">Remove file</button>
+      </div>
+    </form>
+
+    <div id="file-info" class="file-info hidden"></div>
+    <div id="status" class="status">Select a file and choose a target format.</div>
+  </div>
+
+  <div class="preview-grid">
+    <div class="preview-card">
+      <h3>Source format</h3>
+      <div id="original-preview" class="preview-placeholder">No file selected yet.</div>
+    </div>
+    <div class="preview-card">
+      <h3>Converted format</h3>
+      <div id="converted-preview" class="preview-placeholder">Your converted file will appear here.</div>
+      <div class="download-row">
+        <a id="download-link" class="btn download-btn hidden" href="#" download>Download final file</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const uploadInput = document.getElementById('file-upload');
+  const formatSelect = document.getElementById('format-select');
+  const convertForm = document.getElementById('convert-form');
+  const clearButton = document.getElementById('clear-btn');
+  const status = document.getElementById('status');
+  const fileInfo = document.getElementById('file-info');
+  const originalPreview = document.getElementById('original-preview');
+  const convertedPreview = document.getElementById('converted-preview');
+  const downloadLink = document.getElementById('download-link');
+
+  const categoryKey = "{{ category.key }}";
+  let selectedFile = null;
+  let objectUrl = null;
+  const supportedFormats = {
+    {% for fmt in category.formats %}
+    "{{ fmt.lower() }}": {{ category.supported_from.get(fmt.lower(), category.formats)|tojson if category.supported_from else [] }},
+    {% endfor %}
+  };
+
+  function shortenName(name, maxLength = 20) {
+    if (!name) return '';
+    if (name.length <= maxLength) return name;
+    const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '';
+    const base = name.slice(0, name.lastIndexOf('.')) || name;
+    const shortenedBase = base.slice(0, Math.max(1, maxLength - ext.length - 1));
+    return `${shortenedBase}…${ext}`;
+  }
+
+  function getFileExtension(fileName) {
+    if (!fileName) return '';
+    const dotIndex = fileName.lastIndexOf('.');
+    return dotIndex >= 0 ? fileName.slice(dotIndex + 1).toLowerCase() : '';
+  }
+
+  function updateFormatOptions() {
+    const inputFormat = getFileExtension(selectedFile?.name || '');
+    const formatOptions = Array.from(formatSelect.options);
+    const supported = supportedFormats[inputFormat] || [];
+
+    formatOptions.forEach((option) => {
+      const isAllowed = !supported.length || supported.includes(option.value);
+      option.hidden = !isAllowed;
+      option.disabled = !isAllowed;
+    });
+
+    const visibleOptions = formatOptions.filter((option) => !option.hidden);
+    if (!visibleOptions.length) {
+      formatSelect.innerHTML = '<option value="">No compatible formats</option>';
+      return;
+    }
+
+    if (!visibleOptions.some((option) => option.selected)) {
+      visibleOptions[0].selected = true;
+    }
+  }
+
+  function updateFileInfo() {
+    if (!selectedFile) {
+      fileInfo.classList.add('hidden');
+      fileInfo.textContent = '';
+      return;
+    }
+    const sizeInMB = (selectedFile.size / (1024 * 1024)).toFixed(2);
+    fileInfo.textContent = `${shortenName(selectedFile.name)} • ${selectedFile.type || 'file'} • ${sizeInMB} MB`;
+    fileInfo.classList.remove('hidden');
+  }
+
+  function resetConvertedPreview() {
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+      objectUrl = null;
+    }
+    convertedPreview.innerHTML = 'Your converted result will appear here.';
+    convertedPreview.classList.remove('has-content');
+    downloadLink.classList.add('hidden');
+    downloadLink.removeAttribute('href');
+    downloadLink.removeAttribute('download');
+  }
+
+  function showPreviewForFile(file) {
+    if (!file) {
+      originalPreview.innerHTML = 'No file selected yet.';
+      return;
+    }
+
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        originalPreview.innerHTML = `<img src="${event.target.result}" alt="Selected file preview" />`;
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    originalPreview.innerHTML = `<div class="preview-meta">${shortenName(file.name)}<br>${file.type || 'file'}</div>`;
+  }
+
+  uploadInput.addEventListener('change', () => {
+    const file = uploadInput.files[0] || null;
+    selectedFile = file;
+    showPreviewForFile(file);
+    updateFileInfo();
+    updateFormatOptions();
+    resetConvertedPreview();
+    status.textContent = file ? 'Ready to convert.' : '';
+  });
+
+  clearButton.addEventListener('click', () => {
+    selectedFile = null;
+    uploadInput.value = '';
+    originalPreview.innerHTML = 'No file selected yet.';
+    updateFileInfo();
+    updateFormatOptions();
+    resetConvertedPreview();
+    status.textContent = 'Removed.';
+  });
+
+  convertForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    if (!selectedFile) {
+      status.textContent = 'Please choose a file first.';
+      return;
+    }
+
+    const format = formatSelect.value;
+    const inputFormat = getFileExtension(selectedFile.name);
+    const supported = supportedFormats[inputFormat] || [];
+    if (supported.length && !supported.includes(format)) {
+      status.textContent = 'This file type cannot be converted to the selected format.';
+      return;
+    }
+
+    status.textContent = 'Converting...';
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('target_format', format);
+
+    try {
+      const response = await fetch(`/convert/${categoryKey}/`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const blob = await response.blob();
+      objectUrl = URL.createObjectURL(blob);
+      convertedPreview.innerHTML = `<div class="preview-meta">Converted to ${format.toUpperCase()}<br>${shortenName(selectedFile.name)}</div>`;
+      convertedPreview.classList.add('has-content');
+      downloadLink.href = objectUrl;
+      downloadLink.download = `converted.${format}`;
+      downloadLink.classList.remove('hidden');
+      status.textContent = 'Done.';
+    } catch (error) {
+      console.error(error);
+      status.textContent = 'Conversion failed. Please try another format.';
+    }
+  });
+</script>
+{% endblock %}

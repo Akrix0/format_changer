@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Data converter{% endblock %}
+
+{% block content %}
+<div class="convert-page">
+  <div class="hero-card">
+    <h1>Data converter</h1>
+    <p>Convert data files like JSON, CSV, and XML directly in your browser.</p>
+  </div>
+
+  <div class="convert-card">
+    <label for="data-upload">Choose data file</label>
+    <input id="data-upload" type="file" accept=".json,.csv,.xml,.yaml,.yml,.txt" />
+
+    <label for="format-select">Target format</label>
+    <select id="format-select">
+      <option value="json">JSON</option>
+      <option value="csv">CSV</option>
+      <option value="txt">TXT</option>
+    </select>
+
+    <div class="actions-row">
+      <button id="convert-btn" type="button">Convert</button>
+      <button id="clear-btn" type="button" class="btn-secondary">Remove file</button>
+    </div>
+
+    <div id="file-info" class="file-info hidden"></div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="preview-card">
+    <h3>Result</h3>
+    <p id="result-note">The converted data file will appear here after conversion.</p>
+    <div class="download-row">
+      <a id="download-link" class="btn download-btn hidden" href="#" download>Download final file</a>
+    </div>
+  </div>
+</div>
+
+<script>
+  const uploadInput = document.getElementById('data-upload');
+  const formatSelect = document.getElementById('format-select');
+  const convertButton = document.getElementById('convert-btn');
+  const clearButton = document.getElementById('clear-btn');
+  const status = document.getElementById('status');
+  const fileInfo = document.getElementById('file-info');
+  const downloadLink = document.getElementById('download-link');
+  const resultNote = document.getElementById('result-note');
+
+  let selectedFile = null;
+
+  function shortenName(name, maxLength = 20) {
+    if (!name) return '';
+    if (name.length <= maxLength) return name;
+    const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '';
+    const base = name.slice(0, name.lastIndexOf('.')) || name;
+    const shortenedBase = base.slice(0, Math.max(1, maxLength - ext.length - 1));
+    return `${shortenedBase}…${ext}`;
+  }
+
+  function updateFileInfo() {
+    if (!selectedFile) {
+      fileInfo.classList.add('hidden');
+      fileInfo.textContent = '';
+      return;
+    }
+    fileInfo.textContent = `${shortenName(selectedFile.name)} • ${selectedFile.type || 'data'}`;
+    fileInfo.classList.remove('hidden');
+  }
+
+  uploadInput.addEventListener('change', () => {
+    selectedFile = uploadInput.files[0] || null;
+    updateFileInfo();
+    status.textContent = selectedFile ? 'Ready to convert.' : '';
+  });
+
+  clearButton.addEventListener('click', () => {
+    selectedFile = null;
+    uploadInput.value = '';
+    updateFileInfo();
+    downloadLink.classList.add('hidden');
+    downloadLink.removeAttribute('href');
+    downloadLink.removeAttribute('download');
+    resultNote.classList.remove('hidden');
+    status.textContent = 'Removed.';
+  });
+
+  convertButton.addEventListener('click', () => {
+    if (!selectedFile) {
+      status.textContent = 'Please choose a data file first.';
+      return;
+    }
+
+    status.textContent = 'Data conversion is ready for integration.';
+    resultNote.textContent = `Selected file: ${selectedFile.name}`;
+    resultNote.classList.remove('hidden');
+
+    const blob = new Blob([selectedFile], { type: selectedFile.type || 'text/plain' });
+    const objectUrl = URL.createObjectURL(blob);
+    downloadLink.href = objectUrl;
+    downloadLink.download = `converted.${formatSelect.value}`;
+    downloadLink.classList.remove('hidden');
+  });
+</script>
+{% endblock %}
